@@ -24,7 +24,12 @@ import android.view.WindowManagerPolicy;
 
 import java.io.PrintWriter;
 
+import java.io.FileInputStream;
+import java.util.StringTokenizer;
+
 public class InputDevice {
+    static final String TAG = "InputDevice";
+
     static final boolean DEBUG_POINTERS = false;
     static final boolean DEBUG_HACKS = false;
     
@@ -44,6 +49,8 @@ public class InputDevice {
     private static final int JUMPY_TRANSITION_DROPS = 3;
     private static final int JUMPY_DROP_LIMIT = 3;
     
+    static final String CALIBRATION_FILE = "/data/system/tslib/pointercal";
+
     final int id;
     final int classes;
     final String name;
@@ -51,6 +58,7 @@ public class InputDevice {
     final AbsoluteInfo absY;
     final AbsoluteInfo absPressure;
     final AbsoluteInfo absSize;
+    final TransformInfo tInfo;
     
     long mKeyDownTime = 0;
     int mMetaKeysState = 0;
@@ -826,18 +834,21 @@ public class InputDevice {
             final AbsoluteInfo absY = device.absY;
             final AbsoluteInfo absPressure = device.absPressure;
             final AbsoluteInfo absSize = device.absSize;
+            final TransformInfo tInfo = device.tInfo;
             for (int i=0; i<numPointers; i++) {
                 final int j = i * MotionEvent.NUM_SAMPLE_DATA;
+                final float x = reportData[j + MotionEvent.SAMPLE_X];
+                final float y = reportData[j + MotionEvent.SAMPLE_Y];
             
                 if (absX != null) {
-                    reportData[j + MotionEvent.SAMPLE_X] =
-                            ((reportData[j + MotionEvent.SAMPLE_X]-absX.minValue)
-                                / absX.range) * w;
+                    reportData[j + MotionEvent.SAMPLE_X] = (tInfo != null) ?
+                            (tInfo.x1 * x + tInfo.y1 * y + tInfo.z1) / tInfo.s
+                            : ((x - absX.minValue) / absX.range) * w;
                 }
                 if (absY != null) {
-                    reportData[j + MotionEvent.SAMPLE_Y] =
-                            ((reportData[j + MotionEvent.SAMPLE_Y]-absY.minValue)
-                                / absY.range) * h;
+                    reportData[j + MotionEvent.SAMPLE_Y] = (tInfo != null) ?
+                            (tInfo.x2 * x + tInfo.y2 * y + tInfo.z2) / tInfo.s
+                            : ((y - absY.minValue) / absY.range) * h;
                 }
                 if (absPressure != null) {
                     reportData[j + MotionEvent.SAMPLE_PRESSURE] = 
@@ -1011,6 +1022,16 @@ public class InputDevice {
         }
     };
     
+    static class TransformInfo {
+        float x1;
+        float y1;
+        float z1;
+        float x2;
+        float y2;
+        float z2;
+        float s;
+    };
+
     InputDevice(int _id, int _classes, String _name,
             AbsoluteInfo _absX, AbsoluteInfo _absY,
             AbsoluteInfo _absPressure, AbsoluteInfo _absSize) {
@@ -1021,5 +1042,41 @@ public class InputDevice {
         absY = _absY;
         absPressure = _absPressure;
         absSize = _absSize;
+        TransformInfo t = null;
+	Slog.v(TAG, "reading calibration file from: " + CALIBRATION_FILE);
+        try {
+            FileInputStream is = new FileInputStream(CALIBRATION_FILE);
+            byte[] mBuffer = new byte[64];
+            int len = is.read(mBuffer);
+            is.close();
+            if (len > 0) {
+                int i;
+                for (i = 0 ; i < len ; i++) {
+                    if (mBuffer[i] == '\n' || mBuffer[i] == 0) {
+                        break;
+                    }
+                }
+                len = i;
+            }
+            StringTokenizer st = new StringTokenizer( new String(mBuffer, 0, 0, len) );
+
+            t = new TransformInfo ();
+            t.x1 = Integer.parseInt( st.nextToken() );
+            t.y1 = Integer.parseInt( st.nextToken() );
+            t.z1 = Integer.parseInt( st.nextToken() );
+            t.x2 = Integer.parseInt( st.nextToken() );
+            t.y2 = Integer.parseInt( st.nextToken() );
+            t.z2 = Integer.parseInt( st.nextToken() );
+            t.s  = Integer.parseInt( st.nextToken() );
+        } catch (java.io.FileNotFoundException e) {
+		Slog.w(TAG, "Calibration file does not exist or is not accessible");
+        } catch (java.io.IOException e) {
+		Slog.w(TAG, "IO exception during reading: " + e);
+        }
+        tInfo = t;
+
+	Slog.v(TAG, "calibration data: x1=" + t.x1 + " y1=" + t.y1 + " z1=" + t.z1);
+	Slog.v(TAG, "calibration data: x2=" + t.x2 + " y2=" + t.y2 + " z2=" + t.z2);
+	Slog.v(TAG, "calibration data: s=" + t.s);
     }
 };
