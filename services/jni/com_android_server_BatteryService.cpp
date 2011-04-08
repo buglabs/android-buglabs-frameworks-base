@@ -169,27 +169,6 @@ static void setBooleanField(JNIEnv* env, jobject obj, const char* path, jfieldID
     env->SetBooleanField(obj, fieldID, value);
 }
 
-static void setACField(JNIEnv* env, jobject obj, const char* path, jfieldID fieldID)
-{
-    const int SIZE = 128;
-    char buf[SIZE];
-
-    jint value = 0;
-    if (readFromFile(path, buf, SIZE) > 0) {
-        value = atoi(buf);
-
-        char    path[PATH_MAX];
-        snprintf(path, sizeof(path), "KG int value: %i", value);
-        LOGE(path);
-
-        if (value < 0) {
-        	env->SetBooleanField(obj, fieldID, false);
-        } else {
-        	env->SetBooleanField(obj, fieldID, true);
-        }
-    }
-}
-
 static void setIntField(JNIEnv* env, jobject obj, const char* path, jfieldID fieldID)
 {
     const int SIZE = 128;
@@ -218,9 +197,7 @@ static void setVoltageField(JNIEnv* env, jobject obj, const char* path, jfieldID
 
 static void android_server_BatteryService_update(JNIEnv* env, jobject obj)
 {
-	LOGE("KG: In android_server_BatteryService_update()");
-
-    setACField(env, obj, gPaths.acOnlinePath, gFieldIds.mAcOnline);
+    setBooleanField(env, obj, gPaths.acOnlinePath, gFieldIds.mAcOnline);
     setBooleanField(env, obj, gPaths.usbOnlinePath, gFieldIds.mUsbOnline);
     setBooleanField(env, obj, gPaths.batteryPresentPath, gFieldIds.mBatteryPresent);
     
@@ -275,10 +252,17 @@ int register_android_server_BatteryService(JNIEnv* env)
             if (buf[length - 1] == '\n')
                 buf[length - 1] = 0;
 
-            if (strcmp(buf, "Battery") == 0) {
-            	snprintf(path, sizeof(path), "%s/%s/current_now", POWER_SUPPLY_PATH, name);
-            	if (access(path, R_OK) == 0)
-            	    gPaths.acOnlinePath = strdup(path);
+            if (strcmp(buf, "Mains") == 0) {
+                snprintf(path, sizeof(path), "%s/%s/online", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.acOnlinePath = strdup(path);
+            }
+            else if (strcmp(buf, "USB") == 0) {
+                snprintf(path, sizeof(path), "%s/%s/online", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.usbOnlinePath = strdup(path);
+            }
+            else if (strcmp(buf, "Battery") == 0) {
                 snprintf(path, sizeof(path), "%s/%s/status", POWER_SUPPLY_PATH, name);
                 if (access(path, R_OK) == 0)
                     gPaths.batteryStatusPath = strdup(path);
@@ -319,8 +303,6 @@ int register_android_server_BatteryService(JNIEnv* env)
         }
     }
     closedir(dir);
-
-    LOGE("KG was here!");
 
     if (!gPaths.acOnlinePath)
         LOGE("acOnlinePath not found");
