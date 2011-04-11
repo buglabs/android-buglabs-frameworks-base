@@ -905,6 +905,9 @@ public class GpsLocationProvider implements LocationProviderInterface {
         if (!mStarted) {
             if (DEBUG) Log.d(TAG, "startNavigating");
             mStarted = true;
+            /*
+             * See https://github.com/buglabs/android/issues/31
+             * 
             int positionMode;
             if (Settings.Secure.getInt(mContext.getContentResolver(),
                     Settings.Secure.ASSISTED_GPS_ENABLED, 1) != 0) {
@@ -912,8 +915,10 @@ public class GpsLocationProvider implements LocationProviderInterface {
             } else {
                 positionMode = GPS_POSITION_MODE_STANDALONE;
             }
+            */
 
-            if (!native_start(positionMode, false, 1)) {
+            //if (!native_start(positionMode, false, 1)) {
+            if (!native_start(GPS_POSITION_MODE_STANDALONE, false, 1)) {
                 mStarted = false;
                 Log.e(TAG, "native_start failed in startNavigating()");
                 return;
